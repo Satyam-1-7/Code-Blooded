@@ -1,0 +1,7 @@
+{
+  "name": "Sonar Vision-X",
+  "description": "Streamlit & Web Platform for Subsea Sonar Image Analysis, Dual-View Computer Vision Detection, Geospatial Bathymetry Mapping, and Automated PDF/CSV Reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
