@@ -1,16 +1,10 @@
-# Run and deploy your AI Studio app
+# Code-Blooded
 
-This contains everything you need to run your app locally.
+A web application built with TypeScript, Node.js, and Python.
 
-View your app in AI Studio: https://ai.studio/apps/b433d584-9774-41a6-b33d-37e8045bd764
+## Prerequisites
+- Node.js (v18+)
+- Python 3.10+
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
+## Setup & Installation
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
