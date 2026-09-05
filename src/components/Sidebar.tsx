@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       id="sidebar-container"
-      className="w-full lg:w-84 bg-slate-900 border-r border-slate-800 p-4 lg:p-5 flex flex-col gap-4 shrink-0 h-auto lg:min-h-screen overflow-y-auto"
+      className="w-full lg:w-84 bg-slate-900 border-r border-slate-800 p-4 lg:p-5 flex flex-col gap-4 shrink-0 lg:h-screen lg:sticky lg:top-0 overflow-y-auto"
     >
       {/* Streamlit & Mission Control Header */}
       <div>
