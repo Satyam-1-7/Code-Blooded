@@ -53,6 +53,12 @@ export const MOCK_SONAR_SURVEY: SonarSurveyData = {
         shadow_confidence_pct: 97.4,
         verified_3d: true,
       },
+      class_probabilities: [
+        { class_name: 'Naval Mine / UXO Cylinder', probability: 0.965, icon: '💣' },
+        { class_name: 'Submerged Gas Cylinder', probability: 0.021, icon: '🛢️' },
+        { class_name: 'Natural Boulder / Rock', probability: 0.009, icon: '🪨' },
+        { class_name: 'Metal Scrap Debris', probability: 0.005, icon: '⚙️' },
+      ],
     },
     {
       id: 'TGT-002-WRECK',
@@ -89,6 +95,12 @@ export const MOCK_SONAR_SURVEY: SonarSurveyData = {
         shadow_confidence_pct: 92.1,
         verified_3d: true,
       },
+      class_probabilities: [
+        { class_name: 'Shipwreck / Sunken Vessel Hull', probability: 0.912, icon: '🚢' },
+        { class_name: 'Ghost Fishing Net Mesh', probability: 0.048, icon: '🪸' },
+        { class_name: 'Subsea Ridge Structure', probability: 0.026, icon: '🪨' },
+        { class_name: 'Cargo Container Debris', probability: 0.014, icon: '📦' },
+      ],
     },
     {
       id: 'TGT-003-PIPE',
@@ -125,6 +137,12 @@ export const MOCK_SONAR_SURVEY: SonarSurveyData = {
         shadow_confidence_pct: 88.6,
         verified_3d: true,
       },
+      class_probabilities: [
+        { class_name: 'Subsea Pipeline / Marine Trunk', probability: 0.948, icon: '⚙️' },
+        { class_name: 'Armored Subsea Telecom Cable', probability: 0.038, icon: '🔌' },
+        { class_name: 'Seabed Sand Ripple Trench', probability: 0.011, icon: '🌊' },
+        { class_name: 'Natural Fault Line', probability: 0.003, icon: '🪨' },
+      ],
     },
     {
       id: 'TGT-004-NET',
@@ -168,6 +186,12 @@ export const MOCK_SONAR_SURVEY: SonarSurveyData = {
         shadow_confidence_pct: 90.2,
         verified_3d: true,
       },
+      class_probabilities: [
+        { class_name: 'Ghost Fishing Net (WATERS U-Net)', probability: 0.895, icon: '🪸' },
+        { class_name: 'Synthetic Marine Plastic Debris', probability: 0.065, icon: '🗑️' },
+        { class_name: 'Marine Vegetation / Kelp Cluster', probability: 0.028, icon: '🌿' },
+        { class_name: 'Natural Seabed Outcrop', probability: 0.012, icon: '🪨' },
+      ],
     },
   ],
 };

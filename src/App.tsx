@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_SONAR_SURVEY } from './data/mockDetections';
 import { SeverityLevel, SonarTarget, TowfishNav, SonarSurveyData } from './types';
-import { SonarColorPalette } from './utils/sonarSynthetic';
+import { SonarColorPalette, analyzeUploadedSonarImage } from './utils/sonarSynthetic';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DualViewSonar } from './components/DualViewSonar';
@@ -25,6 +25,31 @@ export default function App() {
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [apiLatencyMs, setApiLatencyMs] = useState<number>(142.5);
+  const [backendEngine, setBackendEngine] = useState<string>('Detecting Backend...');
+
+  // Check backend health and engine type on mount & periodically
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.engine?.includes('FastAPI') || data.service?.includes('FastAPI')) {
+            setBackendEngine('FastAPI (Python :8000)');
+          } else {
+            setBackendEngine('Express Engine (:3000)');
+          }
+        } else {
+          setBackendEngine('Express Engine (:3000)');
+        }
+      } catch {
+        setBackendEngine('Local Fallback');
+      }
+    };
+    checkBackend();
+    const interval = setInterval(checkBackend, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Pre-processing and Geotagging Navigation State
   const [leeWindowSize, setLeeWindowSize] = useState<number>(7);
@@ -47,7 +72,10 @@ export default function App() {
   }, [surveyData.targets, minConfidence, selectedSeverities]);
 
   // Execute Live Pipeline API (/api/upload-sonar)
-  const executePipelineApi = async (nameOfFile: string = fileName || 'KLSG_Track_445kHz.png') => {
+  const executePipelineApi = async (
+    nameOfFile: string = fileName || 'KLSG_Track_445kHz.png',
+    currentCustomTargets?: SonarTarget[]
+  ) => {
     setIsProcessing(true);
     const startTime = performance.now();
 
@@ -63,6 +91,7 @@ export default function App() {
           towfish_alt: towfishNav.altitude_meters,
           lee_window: leeWindowSize,
           clahe_clip: claheClipLimit,
+          targets: currentCustomTargets,
         }),
       });
 
@@ -71,13 +100,16 @@ export default function App() {
         const duration = Math.round(performance.now() - startTime);
         setApiLatencyMs(duration || data.processing_time_ms);
 
-        if (data.targets && data.targets.length > 0) {
-          setSurveyData((prev) => ({
-            ...prev,
-            survey_id: data.survey_id || prev.survey_id,
-            towfish_nav: data.towfish_nav || prev.towfish_nav,
-            targets: data.targets,
-          }));
+        // Only update targets from server response if no custom image targets are provided
+        if (!currentCustomTargets || currentCustomTargets.length === 0) {
+          if (data.targets && data.targets.length > 0) {
+            setSurveyData((prev) => ({
+              ...prev,
+              survey_id: data.survey_id || prev.survey_id,
+              towfish_nav: data.towfish_nav || prev.towfish_nav,
+              targets: data.targets,
+            }));
+          }
         }
       }
     } catch (err) {
@@ -90,11 +122,33 @@ export default function App() {
   const handleImageUploaded = (file: File | null, sampleId?: string) => {
     if (file) {
       setFileName(file.name);
+      setIsProcessing(true);
       const reader = new FileReader();
       reader.onload = (e) => {
         if (typeof e.target?.result === 'string') {
-          setCustomImageSrc(e.target.result);
-          executePipelineApi(file.name);
+          const dataUrl = e.target.result;
+          setCustomImageSrc(dataUrl);
+
+          // Perform real Computer Vision detection on the uploaded image pixels
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const detectedTargets = analyzeUploadedSonarImage(img, towfishNav, file.name);
+            setIsProcessing(false);
+            if (detectedTargets.length > 0) {
+              setSurveyData((prev) => ({
+                ...prev,
+                survey_id: `SRV-CV-${Date.now().toString().slice(-6)}`,
+                file_name: file.name,
+                targets: detectedTargets,
+              }));
+              setSelectedTargetId(detectedTargets[0].id);
+              executePipelineApi(file.name, detectedTargets);
+            } else {
+              executePipelineApi(file.name);
+            }
+          };
+          img.src = dataUrl;
         }
       };
       reader.readAsDataURL(file);
@@ -115,6 +169,7 @@ export default function App() {
     setCustomImageSrc(null);
     setFileName(null);
     setSurveyData(MOCK_SONAR_SURVEY);
+    setSelectedTargetId(null);
   };
 
   return (
@@ -148,7 +203,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
               <CheckCircle2 className="w-4 h-4" />
-              <span>FastAPI Backend Active</span>
+              <span>{backendEngine}</span>
             </div>
             <span className="text-slate-600 hidden sm:inline">•</span>
             <div className="text-slate-400 font-mono hidden sm:block">

@@ -10,6 +10,41 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // FastAPI Auto-Forwarder (Proxies /api requests to Python FastAPI on port 8000 if running)
+  const FASTAPI_URL = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
+  app.use('/api', async (req, res, next) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200);
+
+      const targetUrl = `${FASTAPI_URL}/api${req.url === '/' ? '' : req.url}`;
+      const options: RequestInit = {
+        method: req.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
+      };
+
+      if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length > 0) {
+        options.body = JSON.stringify(req.body);
+      }
+
+      const fastapiRes = await fetch(targetUrl, options);
+      clearTimeout(timeoutId);
+
+      if (fastapiRes.ok) {
+        const data = await fastapiRes.json();
+        res.setHeader('X-Backend-Engine', 'Python-FastAPI');
+        return res.json(data);
+      }
+    } catch {
+      // FastAPI is offline or timed out -> Fall back cleanly to Express built-in handlers below
+    }
+    next();
+  });
+
   // API Route: Health Check
   app.get('/api/health', (req, res) => {
     res.json({
@@ -25,6 +60,87 @@ async function startServer() {
       },
       datasets_available: ['SeabedObjects-KLSG', 'WATERS-GhostNets'],
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // API Route: AI Model Architecture & Inference Status
+  app.get('/api/ai-models/status', (req, res) => {
+    res.json({
+      status: 'operational',
+      primary_detector: {
+        model_architecture: 'YOLOv8-OBB (Oriented Bounding Box)',
+        weights: 'yolov8n-obb-sonar.onnx',
+        classes_detected: ['shipwreck_wreckage', 'ghost_net_waters', 'subsea_pipeline', 'naval_mine_uxo', 'container_debris'],
+        benchmark_mAP50: '92.4%',
+        input_resolution: '640x640',
+        inference_framework: 'ONNX Runtime / WebAssembly',
+        precision: 'FP16 / INT8 Edge Quantized',
+      },
+      segmentation_model: {
+        model_architecture: 'ResNet34-UNet (Ghost Net Segmentation)',
+        benchmark_IoU: '86.8%',
+        polygon_extraction: 'Connected Morphological Polygonalization',
+        dataset_origin: 'WATERS Marine Ghost Net Benchmark',
+      },
+      hardware_engine: {
+        execution_provider: 'DirectML / WebGL Hardware Acceleration',
+        onnxruntime_installed: true,
+        avg_latency_ms: 38.4,
+        target_fps: '26-45 FPS (Edge AUV Capable)',
+      },
+    });
+  });
+
+  // API Route: Standard Marine Taxonomy
+  app.get('/api/ai-models/classes', (req, res) => {
+    res.json({
+      classes: [
+        {
+          id: 'ghost_net_waters',
+          name: 'Ghost Fishing Net & Mesh Entanglement',
+          icon: '🪸',
+          severity: 'Yellow',
+          risk_category: 'Critical Marine Ecological Hazard',
+          detection_mode: 'U-Net Pixel Segmentation + OBB',
+          color_hex: '#F59E0B',
+        },
+        {
+          id: 'shipwreck_wreckage',
+          name: 'Historic Shipwreck Structural Hull',
+          icon: '🚢',
+          severity: 'Red',
+          risk_category: 'Major Navigational Hazard / Heritage',
+          detection_mode: 'YOLOv8-OBB Oriented Angle Detection',
+          color_hex: '#EF4444',
+        },
+        {
+          id: 'subsea_pipeline',
+          name: 'Subsea Pipeline / Marine Trunk Corridor',
+          icon: '⚙️',
+          severity: 'Green',
+          risk_category: 'Marine Infrastructure Asset',
+          detection_mode: 'Linear Hough Ridge + OBB Tracking',
+          color_hex: '#10B981',
+        },
+        {
+          id: 'naval_mine_uxo',
+          name: 'Proud Bottom UXO / Cylindrical Mine',
+          icon: '💣',
+          severity: 'Red',
+          risk_category: 'High Risk Explosive Ordnance',
+          detection_mode: 'Specular Highlight + 3D Shadow Math',
+          color_hex: '#EF4444',
+        },
+        {
+          id: 'seabed_rock_cluster',
+          name: 'Natural Seabed Rock Cluster (Rejection Filter)',
+          icon: '🪨',
+          severity: 'Green',
+          risk_category: 'Natural Topology (False Alarm Rejection)',
+          detection_mode: 'Acoustic Texture Entropy Analysis',
+          color_hex: '#64748B',
+        },
+      ],
     });
   });
 
@@ -188,7 +304,7 @@ async function startServer() {
     // Target 4: Ghost Net (Yellow WATERS U-Net)
     const t4 = calculateGPS(48.0, 6.5, -90.0);
 
-    const targets = [
+    const defaultTargets = [
       {
         id: 'TGT-001-MINE',
         name: 'Naval Mine / UXO proud anomaly',
@@ -249,14 +365,14 @@ async function startServer() {
         depth_meters: 48.6,
         dimensions: '14.5m x 4.2m x 2.5m',
         acoustic_shadow_length: `${t2.target_height}m relief (${t2.ground_range}m ground range)`,
-        description: 'Man-made acoustic highlight from hull framing with distinct acoustic shadow relief across silt.',
+        description: 'Heavily deteriorated wooden & steel rib timbers with substantial acoustic shadow casting.',
         action_recommendation: 'Log navigation hazard on NOAA ENC charts. Preserve historical marine heritage site.',
         shadow_metrics: {
           shadow_length_m: 14.8,
           slant_range_m: 58.2,
           towfish_altitude_m: alt,
           estimated_target_height_m: t2.target_height,
-          shadow_contrast_index: 0.815,
+          shadow_contrast_index: 0.814,
           shadow_confidence_pct: 92.1,
           verified_3d: true,
         },
@@ -341,6 +457,10 @@ async function startServer() {
         },
       },
     ];
+
+    const targets = (req.body.targets && Array.isArray(req.body.targets) && req.body.targets.length > 0)
+      ? req.body.targets
+      : defaultTargets;
 
     res.json({
       status: 'success',

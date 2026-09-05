@@ -23,6 +23,12 @@ export interface PolygonPoint {
   y: number;
 }
 
+export interface ClassProbability {
+  class_name: string;
+  probability: number;
+  icon?: string;
+}
+
 export interface SonarTarget {
   id: string;
   name: string;
@@ -45,6 +51,7 @@ export interface SonarTarget {
   action_recommendation?: string;
   shadow_metrics?: ShadowMetrics;
   unet_segmentation_polygon?: PolygonPoint[];
+  class_probabilities?: ClassProbability[];
 }
 
 export interface TowfishNav {

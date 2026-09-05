@@ -33,11 +33,40 @@ export const GeospatialSonarMap: React.FC<GeospatialSonarMapProps> = ({
         attributionControl: false
       });
 
-      // CartoDB Dark/Positron base tiles for authentic marine hydrographic look
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      // Base tile layers (Free, high-resolution, no API key watermark)
+      const oceanLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 16,
+        attribution: 'Esri, GEBCO, NOAA, National Geographic, DeLorme, HERE'
+      });
+
+      const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19,
-        subdomains: 'abcd'
-      }).addTo(map);
+        attribution: 'Esri, Maxar, Earthstar Geographics'
+      });
+
+      const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+        attribution: 'OpenStreetMap, CARTO'
+      });
+
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: 'OpenStreetMap'
+      });
+
+      // Default to Ocean Bathymetry
+      oceanLayer.addTo(map);
+
+      // Add Layer Control for quick switching between Marine Bathymetry, Satellite & Dark Mode
+      const baseMaps = {
+        "🌊 Ocean Bathymetry": oceanLayer,
+        "🛰️ Satellite Imagery": satelliteLayer,
+        "🌌 Dark Nautical": darkLayer,
+        "🗺️ Standard Map": osmLayer
+      };
+
+      L.control.layers(baseMaps, undefined, { position: 'topright' }).addTo(map);
 
       // Survey vessel towfish trajectory line
       const trackPoints: L.LatLngExpression[] = [
@@ -191,7 +220,7 @@ export const GeospatialSonarMap: React.FC<GeospatialSonarMapProps> = ({
         <div ref={mapContainerRef} className="w-full h-full z-0" id="folium-sonar-map" />
 
         {/* Compass Overlay Badge */}
-        <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2 rounded-lg text-[11px] text-slate-300 shadow-lg flex items-center gap-1.5">
+        <div className="absolute bottom-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-700 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-300 shadow-lg flex items-center gap-1.5">
           <Compass className="w-4 h-4 text-cyan-400 animate-spin-slow" />
           <span className="font-mono">WGS84 • Sector B</span>
         </div>
