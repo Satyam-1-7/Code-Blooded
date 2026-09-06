@@ -2,9 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   Upload,
   Sliders,
-  Layers,
   RefreshCw,
-  FileText,
   CheckSquare,
   Square,
   Compass,
@@ -95,21 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id="sidebar-container"
       className="w-full lg:w-84 bg-slate-900 border-r border-slate-800 p-4 lg:p-5 flex flex-col gap-4 shrink-0 lg:h-screen lg:sticky lg:top-0 overflow-y-auto"
     >
-      {/* Streamlit & Mission Control Header */}
+      {/* Sidebar Header */}
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-1.5 text-cyan-400 font-semibold text-xs tracking-wider uppercase">
-            <Layers className="w-3.5 h-3.5" />
-            <span>FastAPI & AI Pipeline</span>
-          </div>
-          <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2 py-0.5 rounded font-mono">
-            v2.4.0
-          </span>
-        </div>
-        <h2 className="text-base font-bold text-slate-100">Sonar Vision Control</h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Side-scan sonar pre-processing, YOLOv8-OBB, U-Net & PyXTF Geotagging.
-        </p>
+        <h2 className="text-base font-bold text-slate-100">Sonar Vision Control Panel</h2>
       </div>
 
       {/* Mode Navigation Tabs */}

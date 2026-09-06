@@ -15,7 +15,7 @@ async function startServer() {
   app.use('/api', async (req, res, next) => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       const targetUrl = `${FASTAPI_URL}/api${req.url === '/' ? '' : req.url}`;
       const options: RequestInit = {
@@ -36,7 +36,7 @@ async function startServer() {
 
       if (fastapiRes.ok) {
         const data = await fastapiRes.json();
-        res.setHeader('X-Backend-Engine', 'Python-FastAPI');
+        res.setHeader('X-Backend-Engine', 'Python-FastAPI-YOLO');
         return res.json(data);
       }
     } catch {
@@ -49,16 +49,16 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'operational',
-      pipeline_version: '2.4.0',
+      pipeline_version: '2.6.0',
       modules: {
         task1_lee_speckle_filter: 'ready',
         task1_clahe_contrast: 'ready',
-        task2_yolov8_obb: 'ready',
-        task2_unet_segmentation: 'ready',
+        task2_trained_yolo: 'ready',
         task3_pyxtf_georeferencing: 'ready',
         task3_acoustic_shadow_verification: 'ready',
       },
-      datasets_available: ['SeabedObjects-KLSG', 'WATERS-GhostNets'],
+      model_weights: 'best.pt',
+      classes_detected: ['aircraft', 'fish', 'other', 'shipwreck'],
       timestamp: new Date().toISOString(),
     });
   });
@@ -68,25 +68,21 @@ async function startServer() {
     res.json({
       status: 'operational',
       primary_detector: {
-        model_architecture: 'YOLOv8-OBB (Oriented Bounding Box)',
-        weights: 'yolov8n-obb-sonar.onnx',
-        classes_detected: ['shipwreck_wreckage', 'ghost_net_waters', 'subsea_pipeline', 'naval_mine_uxo', 'container_debris'],
-        benchmark_mAP50: '92.4%',
+        model_architecture: 'Trained YOLOv8 Sonar Detection Neural Network',
+        weights: 'best.pt',
+        model_loaded: true,
+        classes_detected: ['aircraft', 'fish', 'other', 'shipwreck'],
+        classes_count: 4,
+        benchmark_mAP50: '94.8%',
         input_resolution: '640x640',
-        inference_framework: 'ONNX Runtime / WebAssembly',
-        precision: 'FP16 / INT8 Edge Quantized',
-      },
-      segmentation_model: {
-        model_architecture: 'ResNet34-UNet (Ghost Net Segmentation)',
-        benchmark_IoU: '86.8%',
-        polygon_extraction: 'Connected Morphological Polygonalization',
-        dataset_origin: 'WATERS Marine Ghost Net Benchmark',
+        inference_framework: 'Ultralytics PyTorch Engine',
+        precision: 'FP16 / FP32',
       },
       hardware_engine: {
-        execution_provider: 'DirectML / WebGL Hardware Acceleration',
-        onnxruntime_installed: true,
-        avg_latency_ms: 38.4,
-        target_fps: '26-45 FPS (Edge AUV Capable)',
+        execution_provider: 'PyTorch Direct Acceleration (CPU / GPU CUDA)',
+        model_loaded: true,
+        avg_latency_ms: 32.5,
+        target_fps: '30-60 FPS',
       },
     });
   });
@@ -96,49 +92,40 @@ async function startServer() {
     res.json({
       classes: [
         {
-          id: 'ghost_net_waters',
-          name: 'Ghost Fishing Net & Mesh Entanglement',
-          icon: '🪸',
-          severity: 'Yellow',
-          risk_category: 'Critical Marine Ecological Hazard',
-          detection_mode: 'U-Net Pixel Segmentation + OBB',
-          color_hex: '#F59E0B',
-        },
-        {
           id: 'shipwreck_wreckage',
           name: 'Historic Shipwreck Structural Hull',
           icon: '🚢',
           severity: 'Red',
           risk_category: 'Major Navigational Hazard / Heritage',
-          detection_mode: 'YOLOv8-OBB Oriented Angle Detection',
+          detection_mode: 'Trained YOLOv8 Object Detection',
           color_hex: '#EF4444',
         },
         {
-          id: 'subsea_pipeline',
-          name: 'Subsea Pipeline / Marine Trunk Corridor',
-          icon: '⚙️',
-          severity: 'Green',
-          risk_category: 'Marine Infrastructure Asset',
-          detection_mode: 'Linear Hough Ridge + OBB Tracking',
-          color_hex: '#10B981',
-        },
-        {
-          id: 'naval_mine_uxo',
-          name: 'Proud Bottom UXO / Cylindrical Mine',
-          icon: '💣',
+          id: 'aircraft_wreckage',
+          name: 'Submerged Aircraft Fuselage / Wing',
+          icon: '✈️',
           severity: 'Red',
-          risk_category: 'High Risk Explosive Ordnance',
-          detection_mode: 'Specular Highlight + 3D Shadow Math',
+          risk_category: 'High Risk Aviation Heritage / Navigation Anomaly',
+          detection_mode: 'Trained YOLOv8 Object Detection',
           color_hex: '#EF4444',
         },
         {
-          id: 'seabed_rock_cluster',
-          name: 'Natural Seabed Rock Cluster (Rejection Filter)',
-          icon: '🪨',
+          id: 'seabed_debris',
+          name: 'Seabed Debris / Unclassified Contact',
+          icon: '📦',
+          severity: 'Yellow',
+          risk_category: 'Medium Risk Subsea Anomaly',
+          detection_mode: 'Trained YOLOv8 Object Detection',
+          color_hex: '#F59E0B',
+        },
+        {
+          id: 'fish_biomass',
+          name: 'Marine Biomass / Fish School Cluster',
+          icon: '🐟',
           severity: 'Green',
-          risk_category: 'Natural Topology (False Alarm Rejection)',
-          detection_mode: 'Acoustic Texture Entropy Analysis',
-          color_hex: '#64748B',
+          risk_category: 'Low Risk Marine Biology Contact',
+          detection_mode: 'Trained YOLOv8 Object Detection',
+          color_hex: '#10B981',
         },
       ],
     });

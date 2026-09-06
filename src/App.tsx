@@ -71,9 +71,10 @@ export default function App() {
     );
   }, [surveyData.targets, minConfidence, selectedSeverities]);
 
-  // Execute Live Pipeline API (/api/upload-sonar)
+  // Execute Live Pipeline API (/api/upload-sonar) with Trained YOLO (best.pt)
   const executePipelineApi = async (
     nameOfFile: string = fileName || 'KLSG_Track_445kHz.png',
+    imageBase64?: string,
     currentCustomTargets?: SonarTarget[]
   ) => {
     setIsProcessing(true);
@@ -85,6 +86,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filename: nameOfFile,
+          image_base64: imageBase64,
           towfish_lat: towfishNav.latitude,
           towfish_lon: towfishNav.longitude,
           towfish_heading: towfishNav.heading_degrees,
@@ -100,20 +102,37 @@ export default function App() {
         const duration = Math.round(performance.now() - startTime);
         setApiLatencyMs(duration || data.processing_time_ms);
 
-        // Only update targets from server response if no custom image targets are provided
-        if (!currentCustomTargets || currentCustomTargets.length === 0) {
-          if (data.targets && data.targets.length > 0) {
-            setSurveyData((prev) => ({
-              ...prev,
-              survey_id: data.survey_id || prev.survey_id,
-              towfish_nav: data.towfish_nav || prev.towfish_nav,
-              targets: data.targets,
-            }));
+        // Update with real trained YOLO model targets if returned by backend
+        if (data.targets && data.targets.length > 0) {
+          setSurveyData((prev) => ({
+            ...prev,
+            survey_id: data.survey_id || prev.survey_id,
+            file_name: data.file_name || nameOfFile,
+            towfish_nav: data.towfish_nav || prev.towfish_nav,
+            targets: data.targets.map((tgt: any) => ({
+              ...tgt,
+              name: tgt.target_name || tgt.name,
+              color_hex: tgt.severity === 'Red' ? '#EF4444' : tgt.severity === 'Yellow' ? '#F59E0B' : '#10B981',
+              color_bgr: tgt.severity === 'Red' ? [68, 68, 239] : tgt.severity === 'Yellow' ? [11, 158, 245] : [129, 185, 16],
+              color_rgb: tgt.severity === 'Red' ? [239, 68, 68] : tgt.severity === 'Yellow' ? [245, 158, 11] : [16, 185, 129],
+              bbox: tgt.bbox_obb ? [
+                Math.max(0, tgt.bbox_obb.cx - tgt.bbox_obb.w / 2),
+                Math.max(0, tgt.bbox_obb.cy - tgt.bbox_obb.h / 2),
+                tgt.bbox_obb.w,
+                tgt.bbox_obb.h
+              ] : tgt.bbox || [200, 150, 100, 80],
+              dimensions: tgt.dimensions || `${tgt.bbox_obb?.w ? Math.round(tgt.bbox_obb.w * 0.08) : 5}m x ${tgt.bbox_obb?.h ? Math.round(tgt.bbox_obb.h * 0.08) : 3}m`,
+              acoustic_shadow_length: `${tgt.shadow_metrics?.estimated_target_height_m || 2.1}m relief (${tgt.ground_range_meters || 32}m ground range)`,
+              description: tgt.description || `${tgt.target_name || tgt.name} verified by trained YOLO neural network (best.pt).`,
+            })),
+          }));
+          if (data.targets[0]?.id) {
+            setSelectedTargetId(data.targets[0].id);
           }
         }
       }
     } catch (err) {
-      console.warn('API fetch fallback to local processor:', err);
+      console.warn('FastAPI YOLO fetch fallback:', err);
     } finally {
       setIsProcessing(false);
     }
@@ -129,24 +148,22 @@ export default function App() {
           const dataUrl = e.target.result;
           setCustomImageSrc(dataUrl);
 
-          // Perform real Computer Vision detection on the uploaded image pixels
+          // Perform initial Computer Vision detection for immediate responsiveness
           const img = new Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => {
             const detectedTargets = analyzeUploadedSonarImage(img, towfishNav, file.name);
-            setIsProcessing(false);
             if (detectedTargets.length > 0) {
               setSurveyData((prev) => ({
                 ...prev,
-                survey_id: `SRV-CV-${Date.now().toString().slice(-6)}`,
+                survey_id: `SRV-AI-${Date.now().toString().slice(-6)}`,
                 file_name: file.name,
                 targets: detectedTargets,
               }));
               setSelectedTargetId(detectedTargets[0].id);
-              executePipelineApi(file.name, detectedTargets);
-            } else {
-              executePipelineApi(file.name);
             }
+            // Execute real backend YOLO (best.pt) inference with the uploaded image base64
+            executePipelineApi(file.name, dataUrl, detectedTargets);
           };
           img.src = dataUrl;
         }
