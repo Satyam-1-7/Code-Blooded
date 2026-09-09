@@ -14,7 +14,7 @@ export const TargetTelemetryTable: React.FC<TargetTelemetryTableProps> = ({
   onSelectTarget,
 }) => {
   return (
-    <div id="target-telemetry-section" className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
+    <div id="target-telemetry-section" className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Table className="w-5 h-5 text-cyan-400" />

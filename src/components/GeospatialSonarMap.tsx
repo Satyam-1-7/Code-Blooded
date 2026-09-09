@@ -236,7 +236,7 @@ export const GeospatialSonarMap: React.FC<GeospatialSonarMapProps> = ({
   };
 
   return (
-    <div id="geospatial-map-section" className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-3">
+    <div id="geospatial-map-section" className="space-y-3">
       {/* Map Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
         <div>

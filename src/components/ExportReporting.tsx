@@ -21,7 +21,7 @@ export const ExportReporting: React.FC<ExportReportingProps> = ({
   };
 
   return (
-    <div id="export-reporting-section" className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
+    <div id="export-reporting-section" className="space-y-4">
       <div>
         <div className="flex items-center gap-2">
           <Download className="w-5 h-5 text-cyan-400" />

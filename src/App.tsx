@@ -8,7 +8,7 @@ import { MOCK_SONAR_SURVEY } from './data/mockDetections';
 import { SeverityLevel, SonarTarget, TowfishNav, SonarSurveyData } from './types';
 import { SonarColorPalette, analyzeUploadedSonarImage } from './utils/sonarSynthetic';
 import { Sidebar } from './components/Sidebar';
-import { Header } from './components/Header';
+import { Header, ConsoleTab } from './components/Header';
 import { DualViewSonar } from './components/DualViewSonar';
 import { GeospatialSonarMap } from './components/GeospatialSonarMap';
 import { TargetTelemetryTable } from './components/TargetTelemetryTable';
@@ -16,6 +16,7 @@ import { ExportReporting } from './components/ExportReporting';
 import { Activity, Server, Zap, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<ConsoleTab>('all');
   const [surveyData, setSurveyData] = useState<SonarSurveyData>(MOCK_SONAR_SURVEY);
   const [customImageSrc, setCustomImageSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -214,45 +215,66 @@ export default function App() {
       />
 
       {/* Main Analysis Dashboard */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full overflow-y-auto h-full">
-        {/* Header & Metric Cards */}
-        <Header
-          surveyData={surveyData}
-          activeTargets={activeTargets}
-        />
+      <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-7xl mx-auto w-full overflow-y-auto h-full">
+        {/* ONE BIG UNIFIED MASTER CONSOLE BOX */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md overflow-hidden divide-y divide-slate-800/80">
+          {/* Section 1: Integrated Header, Metrics Bar & Navigation Tabs */}
+          <Header
+            surveyData={surveyData}
+            activeTargets={activeTargets}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          />
 
-        {/* Feature 2: Dual View Image Display (Raw vs OpenCV YOLOv8-OBB & U-Net Bounding Boxes) */}
-        <DualViewSonar
-          customImageSrc={customImageSrc}
-          palette={palette}
-          activeTargets={activeTargets}
-          selectedTargetId={selectedTargetId}
-          onSelectTarget={setSelectedTargetId}
-          fileName={fileName}
-          isProcessing={isProcessing}
-          leeWindowSize={leeWindowSize}
-          claheClipLimit={claheClipLimit}
-        />
+          {/* Section 2: Dual View Acoustic Inspection & AI Overlay */}
+          {(activeTab === 'all' || activeTab === 'dual') && (
+            <div id="section-dual-view" className="p-4 sm:p-5">
+              <DualViewSonar
+                customImageSrc={customImageSrc}
+                palette={palette}
+                activeTargets={activeTargets}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+                fileName={fileName}
+                isProcessing={isProcessing}
+                leeWindowSize={leeWindowSize}
+                claheClipLimit={claheClipLimit}
+              />
+            </div>
+          )}
 
-        {/* Feature 3: Geospatial Mapping (Folium-style Interactive Map) */}
-        <GeospatialSonarMap
-          targets={activeTargets}
-          selectedTargetId={selectedTargetId}
-          onSelectTarget={setSelectedTargetId}
-        />
+          {/* Section 3: Geospatial Mapping (Folium-style Interactive Map) */}
+          {(activeTab === 'all' || activeTab === 'map') && (
+            <div id="section-geospatial-map" className="p-4 sm:p-5">
+              <GeospatialSonarMap
+                targets={activeTargets}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+              />
+            </div>
+          )}
 
-        {/* Target Details Telemetry & Acoustic Shadow Math Table */}
-        <TargetTelemetryTable
-          targets={activeTargets}
-          selectedTargetId={selectedTargetId}
-          onSelectTarget={setSelectedTargetId}
-        />
+          {/* Section 4: Target Details Telemetry & Acoustic Shadow Math Table */}
+          {(activeTab === 'all' || activeTab === 'telemetry') && (
+            <div id="section-telemetry-table" className="p-4 sm:p-5">
+              <TargetTelemetryTable
+                targets={activeTargets}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+              />
+            </div>
+          )}
 
-        {/* Feature 4: Export & Reporting (CSV + ReportLab PDF) */}
-        <ExportReporting
-          surveyData={surveyData}
-          activeTargets={activeTargets}
-        />
+          {/* Section 5: Export & Reporting */}
+          {(activeTab === 'all' || activeTab === 'export') && (
+            <div id="section-export-reporting" className="p-4 sm:p-5 bg-slate-950/30">
+              <ExportReporting
+                surveyData={surveyData}
+                activeTargets={activeTargets}
+              />
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

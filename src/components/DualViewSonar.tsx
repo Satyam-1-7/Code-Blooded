@@ -111,7 +111,7 @@ export const DualViewSonar: React.FC<DualViewSonarProps> = ({
   return (
     <div id="dual-view-section" className="space-y-4">
       {/* Header with Title and Zoom Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-4 rounded-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
         <div>
           <div className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-cyan-400" />
