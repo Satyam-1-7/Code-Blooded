@@ -682,6 +682,27 @@ def execute_full_sonar_pipeline(
         except Exception as e:
             print(f"[AI PIPELINE] Bytes decode error: {e}")
 
+    # 1a. Try loading from disk if filename matches a known benchmark sample
+    SAMPLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples")
+    KNOWN_SAMPLES = [
+        "KLSG_Naval_Mine_900kHz.png",
+        "KLSG_Shipwreck_445kHz.png",
+        "KLSG_Pipeline_Trunk.png",
+        "WATERS_GhostNet_Polymer.png",
+        "SeabedObjects_Sample.png",
+    ]
+    if raw_cv is None and filename in KNOWN_SAMPLES:
+        sample_path = os.path.join(SAMPLES_DIR, filename)
+        if os.path.exists(sample_path):
+            raw_cv = cv2.imread(sample_path, cv2.IMREAD_GRAYSCALE)
+            if raw_cv is not None:
+                is_custom_upload = True
+                print(f"[AI PIPELINE] Loaded benchmark sample from disk: {sample_path}")
+            else:
+                print(f"[AI PIPELINE] Failed to decode sample image: {sample_path}")
+        else:
+            print(f"[AI PIPELINE] Sample file not found: {sample_path}")
+
     if raw_cv is None:
         raw_cv = generate_synthetic_sonar_canvas()
 

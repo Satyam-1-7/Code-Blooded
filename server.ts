@@ -10,6 +10,10 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // Serve benchmark sonar sample images from backend/samples/
+  app.use('/samples', express.static(path.join(process.cwd(), 'backend', 'samples')));
+
+
   // FastAPI Auto-Forwarder (Proxies /api requests to Python FastAPI on port 8000 if running)
   const FASTAPI_URL = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
   app.use('/api', async (req, res, next) => {

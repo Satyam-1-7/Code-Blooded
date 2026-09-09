@@ -161,15 +161,36 @@ export default function App() {
       };
       reader.readAsDataURL(file);
     } else if (sampleId) {
-      // Benchmark Dataset Sample Loader
-      setCustomImageSrc(null);
+      // Benchmark Dataset Sample Loader — fetch the actual PNG and run YOLO on it
       let sampleName = 'SeabedObjects_Sample.png';
       if (sampleId === 'klsg-mine-uxo') sampleName = 'KLSG_Naval_Mine_900kHz.png';
       if (sampleId === 'klsg-shipwreck') sampleName = 'KLSG_Shipwreck_445kHz.png';
       if (sampleId === 'klsg-pipeline') sampleName = 'KLSG_Pipeline_Trunk.png';
       if (sampleId === 'waters-ghostnet') sampleName = 'WATERS_GhostNet_Polymer.png';
       setFileName(sampleName);
-      executePipelineApi(sampleName);
+      setIsProcessing(true);
+      setSurveyData((prev) => ({ ...prev, targets: [] }));
+      setSelectedTargetId(null);
+
+      try {
+        // Fetch the sample image from the backend /samples/ route
+        const imgResp = await fetch(`/samples/${sampleName}`);
+        if (imgResp.ok) {
+          const blob = await imgResp.blob();
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            setCustomImageSrc(dataUrl);
+            executePipelineApi(sampleName, dataUrl);
+          };
+          reader.readAsDataURL(blob);
+        } else {
+          // Backend has the image for inference even if we can't display it
+          executePipelineApi(sampleName);
+        }
+      } catch {
+        executePipelineApi(sampleName);
+      }
     }
   };
 
