@@ -7,7 +7,6 @@ import {
   Square,
   Compass,
   Zap,
-  Database,
   SlidersHorizontal,
 } from 'lucide-react';
 import { SeverityLevel, TowfishNav } from '../types';
@@ -82,10 +81,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } else {
       setSelectedSeverities([...selectedSeverities, sev]);
     }
-  };
-
-  const loadDatasetSample = (sampleId: string) => {
-    onImageUploaded(null, sampleId);
   };
 
   return (
@@ -172,44 +167,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Reset to Standard Track</span>
               </button>
             )}
-          </div>
-
-          {/* Quick Dataset Samples */}
-          <div className="space-y-2 pt-2 border-t border-slate-800/80">
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Benchmark Dataset Samples</span>
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => loadDatasetSample('klsg-mine-uxo')}
-                className="p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
-              >
-                <div className="text-[11px] font-bold text-red-400">KLSG Mine UXO</div>
-                <div className="text-[10px] text-slate-400">900 kHz Cylindrical</div>
-              </button>
-              <button
-                onClick={() => loadDatasetSample('klsg-shipwreck')}
-                className="p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
-              >
-                <div className="text-[11px] font-bold text-amber-400">KLSG Shipwreck</div>
-                <div className="text-[10px] text-slate-400">445 kHz Keel Frame</div>
-              </button>
-              <button
-                onClick={() => loadDatasetSample('klsg-pipeline')}
-                className="p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
-              >
-                <div className="text-[11px] font-bold text-emerald-400">KLSG Pipeline</div>
-                <div className="text-[10px] text-slate-400">445 kHz Gas Trunk</div>
-              </button>
-              <button
-                onClick={() => loadDatasetSample('waters-ghostnet')}
-                className="p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-left transition"
-              >
-                <div className="text-[11px] font-bold text-amber-400">WATERS Net</div>
-                <div className="text-[10px] text-slate-400">U-Net Ghost Net</div>
-              </button>
-            </div>
           </div>
         </div>
       )}
