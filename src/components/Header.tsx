@@ -19,43 +19,14 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="space-y-4">
       {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
+      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-950">
-            <Waves className="w-7 h-7" />
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-950">
+            <Waves className="w-6 h-6" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
-                Sonar Vision-X
-              </h1>
-              <span className="text-[10px] font-mono font-bold bg-cyan-950 border border-cyan-700/60 text-cyan-300 px-2 py-0.5 rounded-full">
-                Mission Control
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              Subsea Sonar Imagery Target Classification, Geospatial Mapping & Automated Mission Reporting
-            </p>
-          </div>
-        </div>
-
-        {/* Survey Info Pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setShowAiModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/90 border border-cyan-700/60 text-xs font-mono text-cyan-300 transition shadow-sm hover:shadow-cyan-900/40"
-          >
-            <Cpu className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            <span>Trained YOLOv8 (best.pt) • PyTorch</span>
-          </button>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 text-xs font-mono text-slate-300">
-            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-            <span>{surveyData.survey_id}</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 text-xs font-mono text-cyan-300">
-            <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            <span>445 kHz Hydroacoustic</span>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
+            Sonar Vision-X
+          </h1>
         </div>
       </div>
 

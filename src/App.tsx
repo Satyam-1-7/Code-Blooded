@@ -215,27 +215,6 @@ export default function App() {
 
       {/* Main Analysis Dashboard */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full overflow-y-auto h-full">
-        {/* Real-time Pipeline Status Bar */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{backendEngine}</span>
-            </div>
-            <span className="text-slate-600 hidden sm:inline">•</span>
-            <div className="text-slate-400 font-mono hidden sm:block">
-              Endpoint: <code className="text-cyan-300">POST /api/upload-sonar</code>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
-            <span>Latency: <strong className="text-cyan-400">{apiLatencyMs} ms</strong></span>
-            <span>Towfish Alt: <strong className="text-sky-300">{towfishNav.altitude_meters}m</strong></span>
-            <span>Lee: <strong className="text-amber-300">{leeWindowSize}×{leeWindowSize}</strong></span>
-            <span>CLAHE: <strong className="text-emerald-300">{claheClipLimit.toFixed(1)}</strong></span>
-          </div>
-        </div>
-
         {/* Header & Metric Cards */}
         <Header
           surveyData={surveyData}
