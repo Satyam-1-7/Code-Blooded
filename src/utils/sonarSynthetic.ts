@@ -210,7 +210,7 @@ export function analyzeUploadedSonarImage(
     const targetLon = Math.round((towfishNav.longitude + (distDeg * Math.sin(athwartAngle)) / Math.cos((towfishNav.latitude * Math.PI) / 180.0)) * 1000000) / 1000000;
 
     // Classification Heuristics
-    let targetType: 'aircraft_wreckage' | 'shipwreck_wreckage' | 'ghost_net_waters' | 'subsea_pipeline' | 'naval_mine_uxo' = 'shipwreck_wreckage';
+    let targetType: 'shipwreck_wreckage' | 'ghost_net_waters' | 'subsea_pipeline' | 'naval_mine_uxo' = 'shipwreck_wreckage';
     let targetName = 'Sunken Shipwreck Hull Section';
     let severity: 'Red' | 'Yellow' | 'Green' = 'Yellow';
     let riskLevel = 'Medium Risk Obstruction';
@@ -221,23 +221,8 @@ export function analyzeUploadedSonarImage(
     let action = 'Log navigation hazard on NOAA ENC charts. Preserve archaeological / salvage perimeter.';
     let unetPolygon: PolygonPoint[] | undefined = undefined;
 
-    // Detect Aircraft vs Shipwreck vs Pipeline vs UXO
-    const isAircraftFilename = fileName && /(aircraft|plane|airplane|fuselage|flight|cessna|bomber|jet|000099|airframe)/i.test(fileName);
-    const isCruciformWingGeometry = (aspectRatio >= 1.05 && aspectRatio <= 2.85 && diag > 100 && (area > 2600 || Math.abs(angleDeg) > 35));
-
-    if (isAircraftFilename || isCruciformWingGeometry) {
-      // Submerged Aircraft Fuselage & Wing Section
-      targetType = 'aircraft_wreckage';
-      targetName = 'Submerged Aircraft Fuselage / Wing Structure';
-      severity = 'Red';
-      riskLevel = 'High Risk Aviation Heritage / Navigation Hazard';
-      colorHex = '#EF4444';
-      colorRgb = [239, 68, 68];
-      colorBgr = [68, 68, 239];
-      confidence = 0.968;
-      action = 'Log submerged aircraft wreckage GPS coordinates. Establish 100m standoff perimeter and notify maritime archaeology / SAR authority.';
-    } else if (area > 5000 || diag > 160) {
-      // Large Shipwreck / Vessel Structure (e.g. sunken keel / barge)
+    if (area > 5000 || diag > 160) {
+      // Large Shipwreck / Vessel Structure (e.g. Titanic or sunken barge)
       targetType = 'shipwreck_wreckage';
       targetName = 'Historic Shipwreck Structural Hull';
       severity = 'Red';
@@ -295,18 +280,11 @@ export function analyzeUploadedSonarImage(
     const realWidthM = Math.round((minorAxis / 8.0) * 10) / 10;
 
     let classProbabilities: { class_name: string; probability: number; icon?: string }[] = [];
-    if (targetType === 'aircraft_wreckage') {
-      classProbabilities = [
-        { class_name: 'Submerged Aircraft Fuselage / Wing', probability: confidence, icon: '✈️' },
-        { class_name: 'Historic Shipwreck Structural Hull', probability: Math.round((1 - confidence) * 0.45 * 1000) / 1000, icon: '🚢' },
-        { class_name: 'Subsea Cargo Debris', probability: Math.round((1 - confidence) * 0.35 * 1000) / 1000, icon: '📦' },
-        { class_name: 'Natural Seabed Outcrop', probability: Math.round((1 - confidence) * 0.20 * 1000) / 1000, icon: '🪨' },
-      ];
-    } else if (targetType === 'shipwreck_wreckage') {
+    if (targetType === 'shipwreck_wreckage') {
       classProbabilities = [
         { class_name: 'Historic Shipwreck / Hull Structure', probability: confidence, icon: '🚢' },
-        { class_name: 'Submerged Aircraft Fuselage / Wing', probability: Math.round((1 - confidence) * 0.45 * 1000) / 1000, icon: '✈️' },
-        { class_name: 'Ghost Net & Polymer Entanglement', probability: Math.round((1 - confidence) * 0.35 * 1000) / 1000, icon: '🪸' },
+        { class_name: 'Ghost Net & Polymer Entanglement', probability: Math.round((1 - confidence) * 0.45 * 1000) / 1000, icon: '🪸' },
+        { class_name: 'Natural Seabed Ridge / Mound', probability: Math.round((1 - confidence) * 0.35 * 1000) / 1000, icon: '🪨' },
         { class_name: 'Subsea Cargo Debris', probability: Math.round((1 - confidence) * 0.20 * 1000) / 1000, icon: '📦' },
       ];
     } else if (targetType === 'ghost_net_waters') {
@@ -332,10 +310,8 @@ export function analyzeUploadedSonarImage(
       ];
     }
 
-    const typeSuffix = targetType === 'aircraft_wreckage' ? 'PLANE' : targetType === 'shipwreck_wreckage' ? 'WRECK' : targetType === 'ghost_net_waters' ? 'NET' : targetType === 'subsea_pipeline' ? 'PIPE' : 'UXO';
-
     generatedTargets.push({
-      id: `TGT-00${clusterIdx + 1}-${typeSuffix}`,
+      id: `TGT-00${clusterIdx + 1}-${targetType === 'shipwreck_wreckage' ? 'WRECK' : targetType === 'ghost_net_waters' ? 'NET' : targetType === 'subsea_pipeline' ? 'PIPE' : 'UXO'}`,
       name: targetName,
       target_type: targetType,
       dataset_source: `Computer Vision Layer (${fileName})`,

@@ -294,45 +294,8 @@ async function startServer() {
     // Target 4: Ghost Net (Yellow WATERS U-Net)
     const t4 = calculateGPS(48.0, 6.5, -90.0);
 
-    const isAircraft = filename && /(aircraft|plane|airplane|fuselage|flight|cessna|bomber|jet|000099|airframe)/i.test(String(filename));
-
     const defaultTargets = [
-      isAircraft ? {
-        id: 'TGT-001-PLANE',
-        name: 'Submerged Aircraft Fuselage & Wing Section',
-        target_type: 'aircraft_wreckage',
-        dataset_source: 'SeabedObjects-KLSG (Aircraft Class)',
-        severity: 'Red',
-        risk_level: 'High Risk Aviation Heritage',
-        confidence: 0.968,
-        color_hex: '#EF4444',
-        color_bgr: [68, 68, 239],
-        color_rgb: [239, 68, 68],
-        bbox: [320, 200, 240, 160],
-        bbox_obb: {
-          cx: 440,
-          cy: 280,
-          w: 240,
-          h: 160,
-          angle_deg: 66.6,
-        },
-        latitude: t2.target_lat,
-        longitude: t2.target_lon,
-        depth_meters: 38.5,
-        dimensions: '18.2m wingspan x 14.6m length',
-        acoustic_shadow_length: `${t2.target_height}m relief (${t2.ground_range}m ground range)`,
-        description: 'Cruciform acoustic backscatter signature with distinct airframe fuselage and symmetric wing structure.',
-        action_recommendation: 'Log submerged aircraft wreckage GPS coordinates. Establish 100m standoff perimeter and notify maritime archaeology authority.',
-        shadow_metrics: {
-          shadow_length_m: 14.8,
-          slant_range_m: 58.2,
-          towfish_altitude_m: alt,
-          estimated_target_height_m: t2.target_height,
-          shadow_contrast_index: 0.895,
-          shadow_confidence_pct: 96.8,
-          verified_3d: true,
-        },
-      } : {
+      {
         id: 'TGT-001-MINE',
         name: 'Naval Mine / UXO proud anomaly',
         target_type: 'naval_mine_uxo',
