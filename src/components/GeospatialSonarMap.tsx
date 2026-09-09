@@ -11,6 +11,8 @@ interface GeospatialSonarMapProps {
 
 // Icons for each target type
 const TARGET_ICONS: Record<string, string> = {
+  aircraft_wreckage: '✈️',
+  aircraft: '✈️',
   naval_mine_uxo: '💣',
   shipwreck_wreckage: '🚢',
   subsea_pipeline: '⚙️',
