@@ -40,7 +40,7 @@ async function startServer() {
   app.use('/api', async (req, res, next) => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       const targetUrl = `${FASTAPI_URL}/api${req.url === '/' ? '' : req.url}`;
       const options: RequestInit = {
@@ -473,14 +473,18 @@ async function startServer() {
       },
     ];
 
-    const isCustom = Boolean(
-      req.body.image_base64 ||
-      (filename && filename !== 'sonar_ping_survey.png' && !filename.startsWith('KLSG_') && !filename.startsWith('WATERS_'))
+    // Only show demo targets when no image is uploaded (pure synthetic mode).
+    // Any custom upload always gets an empty array from this fallback (real results come from FastAPI).
+    const isCustomUpload = Boolean(req.body.image_base64);
+    const isKnownSample = !isCustomUpload && (
+      !filename ||
+      filename === 'sonar_ping_survey.png' ||
+      filename.startsWith('KLSG_') ||
+      filename.startsWith('WATERS_') ||
+      filename.startsWith('SeabedObjects_')
     );
 
-    const targets = (req.body.targets && Array.isArray(req.body.targets))
-      ? req.body.targets
-      : (isCustom ? [] : defaultTargets);
+    const targets = isCustomUpload ? [] : (isKnownSample ? defaultTargets : []);
 
     res.json({
       status: 'success',
