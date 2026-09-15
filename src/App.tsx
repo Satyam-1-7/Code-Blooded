@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_SONAR_SURVEY } from './data/mockDetections';
 import { SeverityLevel, SonarTarget, TowfishNav, SonarSurveyData } from './types';
-import { SonarColorPalette, analyzeUploadedSonarImage } from './utils/sonarSynthetic';
+import { SonarColorPalette } from './utils/sonarSynthetic';
 import { Sidebar } from './components/Sidebar';
 import { Header, ConsoleTab } from './components/Header';
 import { DualViewSonar } from './components/DualViewSonar';
@@ -21,7 +21,6 @@ export default function App() {
   const [customImageSrc, setCustomImageSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [palette, setPalette] = useState<SonarColorPalette>('amber');
-  const [minConfidence, setMinConfidence] = useState<number>(0.75);
   const [selectedSeverities, setSelectedSeverities] = useState<SeverityLevel[]>(['Red', 'Yellow', 'Green']);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -65,18 +64,15 @@ export default function App() {
     layback_meters: 45.0,
   });
 
-  // Filtered active targets based on confidence slider and severity multiselect
+  // Filtered active targets based on severity multiselect
   const activeTargets = useMemo(() => {
-    return surveyData.targets.filter(
-      (t) => t.confidence >= minConfidence && selectedSeverities.includes(t.severity)
-    );
-  }, [surveyData.targets, minConfidence, selectedSeverities]);
+    return surveyData.targets.filter((t) => selectedSeverities.includes(t.severity));
+  }, [surveyData.targets, selectedSeverities]);
 
   // Execute Live Pipeline API (/api/upload-sonar) with Trained YOLO (best.pt)
   const executePipelineApi = async (
     nameOfFile: string = fileName || 'KLSG_Track_445kHz.png',
-    imageBase64?: string,
-    currentCustomTargets?: SonarTarget[]
+    imageBase64?: string
   ) => {
     setIsProcessing(true);
     const startTime = performance.now();
@@ -94,7 +90,6 @@ export default function App() {
           towfish_alt: towfishNav.altitude_meters,
           lee_window: leeWindowSize,
           clahe_clip: claheClipLimit,
-          targets: currentCustomTargets,
         }),
       });
 
@@ -103,33 +98,40 @@ export default function App() {
         const duration = Math.round(performance.now() - startTime);
         setApiLatencyMs(duration || data.processing_time_ms);
 
-        // Update with real trained YOLO model targets if returned by backend
-        if (data.targets && data.targets.length > 0) {
-          setSurveyData((prev) => ({
-            ...prev,
-            survey_id: data.survey_id || prev.survey_id,
-            file_name: data.file_name || nameOfFile,
-            towfish_nav: data.towfish_nav || prev.towfish_nav,
-            targets: data.targets.map((tgt: any) => ({
-              ...tgt,
-              name: tgt.target_name || tgt.name,
-              color_hex: tgt.severity === 'Red' ? '#EF4444' : tgt.severity === 'Yellow' ? '#F59E0B' : '#10B981',
-              color_bgr: tgt.severity === 'Red' ? [68, 68, 239] : tgt.severity === 'Yellow' ? [11, 158, 245] : [129, 185, 16],
-              color_rgb: tgt.severity === 'Red' ? [239, 68, 68] : tgt.severity === 'Yellow' ? [245, 158, 11] : [16, 185, 129],
-              bbox: tgt.bbox_obb ? [
-                Math.max(0, tgt.bbox_obb.cx - tgt.bbox_obb.w / 2),
-                Math.max(0, tgt.bbox_obb.cy - tgt.bbox_obb.h / 2),
-                tgt.bbox_obb.w,
-                tgt.bbox_obb.h
-              ] : tgt.bbox || [200, 150, 100, 80],
-              dimensions: tgt.dimensions || `${tgt.bbox_obb?.w ? Math.round(tgt.bbox_obb.w * 0.08) : 5}m x ${tgt.bbox_obb?.h ? Math.round(tgt.bbox_obb.h * 0.08) : 3}m`,
-              acoustic_shadow_length: `${tgt.shadow_metrics?.estimated_target_height_m || 2.1}m relief (${tgt.ground_range_meters || 32}m ground range)`,
-              description: tgt.description || `${tgt.target_name || tgt.name} verified by trained YOLO neural network (best.pt).`,
-            })),
-          }));
-          if (data.targets[0]?.id) {
-            setSelectedTargetId(data.targets[0].id);
-          }
+        // Update with real trained YOLO model targets (empty list if 0 detections)
+        const returnedTargets = Array.isArray(data.targets) ? data.targets : [];
+        const formattedTargets = returnedTargets.map((tgt: any, idx: number) => ({
+          ...tgt,
+          id: tgt.id || `TGT-YOLO-${idx + 1}`,
+          name: tgt.target_name || tgt.name || 'Sonar Contact',
+          confidence: tgt.confidence,
+          severity: tgt.severity || 'Yellow',
+          color_hex: tgt.severity === 'Red' ? '#EF4444' : tgt.severity === 'Green' ? '#10B981' : '#F59E0B',
+          color_bgr: tgt.severity === 'Red' ? [68, 68, 239] : tgt.severity === 'Green' ? [129, 185, 16] : [11, 158, 245],
+          color_rgb: tgt.severity === 'Red' ? [239, 68, 68] : tgt.severity === 'Green' ? [16, 185, 129] : [245, 158, 11],
+          bbox: tgt.bbox_obb ? [
+            Math.max(0, tgt.bbox_obb.cx - tgt.bbox_obb.w / 2),
+            Math.max(0, tgt.bbox_obb.cy - tgt.bbox_obb.h / 2),
+            tgt.bbox_obb.w,
+            tgt.bbox_obb.h
+          ] : tgt.bbox || [200, 150, 100, 80],
+          dimensions: tgt.dimensions || `${tgt.bbox_obb?.w ? Math.round(tgt.bbox_obb.w * 0.08) : 5}m x ${tgt.bbox_obb?.h ? Math.round(tgt.bbox_obb.h * 0.08) : 3}m`,
+          acoustic_shadow_length: `${tgt.shadow_metrics?.estimated_target_height_m || 2.1}m relief (${tgt.ground_range_meters || 32}m ground range)`,
+          description: tgt.description || `${tgt.target_name || tgt.name} verified by trained YOLO neural network (best.pt).`,
+        }));
+
+        setSurveyData((prev) => ({
+          ...prev,
+          survey_id: data.survey_id || prev.survey_id,
+          file_name: data.file_name || nameOfFile,
+          towfish_nav: data.towfish_nav || prev.towfish_nav,
+          targets: formattedTargets,
+        }));
+
+        if (formattedTargets.length > 0) {
+          setSelectedTargetId(formattedTargets[0].id);
+        } else {
+          setSelectedTargetId(null);
         }
       }
     } catch (err) {
@@ -143,30 +145,22 @@ export default function App() {
     if (file) {
       setFileName(file.name);
       setIsProcessing(true);
+      // Immediately reset targets to empty array so no fake targets show
+      setSurveyData((prev) => ({
+        ...prev,
+        survey_id: `SRV-AI-${Date.now().toString().slice(-6)}`,
+        file_name: file.name,
+        targets: [],
+      }));
+      setSelectedTargetId(null);
+
       const reader = new FileReader();
       reader.onload = (e) => {
         if (typeof e.target?.result === 'string') {
           const dataUrl = e.target.result;
           setCustomImageSrc(dataUrl);
-
-          // Perform initial Computer Vision detection for immediate responsiveness
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            const detectedTargets = analyzeUploadedSonarImage(img, towfishNav, file.name);
-            if (detectedTargets.length > 0) {
-              setSurveyData((prev) => ({
-                ...prev,
-                survey_id: `SRV-AI-${Date.now().toString().slice(-6)}`,
-                file_name: file.name,
-                targets: detectedTargets,
-              }));
-              setSelectedTargetId(detectedTargets[0].id);
-            }
-            // Execute real backend YOLO (best.pt) inference with the uploaded image base64
-            executePipelineApi(file.name, dataUrl, detectedTargets);
-          };
-          img.src = dataUrl;
+          // Execute real backend YOLO (best.pt) inference with the uploaded image base64
+          executePipelineApi(file.name, dataUrl);
         }
       };
       reader.readAsDataURL(file);
@@ -196,8 +190,6 @@ export default function App() {
       <Sidebar
         onImageUploaded={handleImageUploaded}
         fileName={fileName}
-        minConfidence={minConfidence}
-        setMinConfidence={setMinConfidence}
         selectedSeverities={selectedSeverities}
         setSelectedSeverities={setSelectedSeverities}
         palette={palette}

@@ -1,8 +1,33 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import { spawn } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 
+function ensureFastAPIRunning() {
+  const isWin = process.platform === 'win32';
+  const pythonExec = isWin
+    ? path.join(process.cwd(), 'backend', 'venv', 'Scripts', 'python.exe')
+    : path.join(process.cwd(), 'backend', 'venv', 'bin', 'python');
+  const scriptPath = path.join(process.cwd(), 'backend', 'fastapi_pipeline.py');
+
+  fetch('http://127.0.0.1:8000/health').catch(() => {
+    if (fs.existsSync(pythonExec) && fs.existsSync(scriptPath)) {
+      console.log('[Sonar Vision AI] Auto-starting Python FastAPI backend on port 8000...');
+      const pyProc = spawn(pythonExec, [scriptPath], {
+        cwd: process.cwd(),
+        stdio: 'inherit',
+        shell: isWin,
+      });
+      pyProc.on('error', (err) => {
+        console.warn('[Sonar Vision AI] Failed to auto-start Python backend:', err.message);
+      });
+    }
+  });
+}
+
 async function startServer() {
+  ensureFastAPIRunning();
   const app = express();
   const PORT = 3000;
 
@@ -448,9 +473,14 @@ async function startServer() {
       },
     ];
 
-    const targets = (req.body.targets && Array.isArray(req.body.targets) && req.body.targets.length > 0)
+    const isCustom = Boolean(
+      req.body.image_base64 ||
+      (filename && filename !== 'sonar_ping_survey.png' && !filename.startsWith('KLSG_') && !filename.startsWith('WATERS_'))
+    );
+
+    const targets = (req.body.targets && Array.isArray(req.body.targets))
       ? req.body.targets
-      : defaultTargets;
+      : (isCustom ? [] : defaultTargets);
 
     res.json({
       status: 'success',

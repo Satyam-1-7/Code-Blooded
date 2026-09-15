@@ -33,23 +33,28 @@ try:
     from ultralytics import YOLO
     CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
     CANDIDATES = [
-        os.path.join(CURRENT_DIR, "best.pt"),
         os.path.join(CURRENT_DIR, "models", "best.pt"),
-        "best.pt",
+        os.path.join(CURRENT_DIR, "best.pt"),
+        os.path.join(os.getcwd(), "backend", "models", "best.pt"),
+        os.path.join(os.getcwd(), "backend", "best.pt"),
+        "backend/models/best.pt",
         "backend/best.pt",
+        "best.pt",
     ]
     for c in CANDIDATES:
         if os.path.exists(c):
-            MODEL_PATH = c
+            MODEL_PATH = os.path.abspath(c)
             break
 
     if MODEL_PATH:
         yolo_model = YOLO(MODEL_PATH)
+        print("=" * 60)
         print(f"[AI PIPELINE] Loaded trained YOLO model from: {MODEL_PATH}")
         print(f"[AI PIPELINE] Model task: {getattr(yolo_model, 'task', 'detect')}")
         print(f"[AI PIPELINE] Model classes ({len(yolo_model.names)}): {yolo_model.names}")
+        print("=" * 60)
     else:
-        print("[AI PIPELINE] No best.pt found in backend paths.")
+        print("[AI PIPELINE] Warning: No best.pt found in backend paths.")
 except Exception as err:
     print(f"[AI PIPELINE] Failed to initialize YOLO model: {err}")
 
@@ -387,20 +392,51 @@ def encode_image_base64(img: np.ndarray) -> str:
     _, buffer = cv2.imencode('.png', img)
     return base64.b64encode(buffer).decode('utf-8')
 
+def compute_box_iou(b1: List[float], b2: List[float]) -> float:
+    xA = max(b1[0], b2[0])
+    yA = max(b1[1], b2[1])
+    xB = min(b1[2], b2[2])
+    yB = min(b1[3], b2[3])
+    inter = max(0.0, xB - xA) * max(0.0, yB - yA)
+    area1 = max(1.0, (b1[2] - b1[0]) * (b1[3] - b1[1]))
+    area2 = max(1.0, (b2[2] - b2[0]) * (b2[3] - b2[1]))
+    union = area1 + area2 - inter
+    return inter / union
+
+def apply_nms_suppression(detections: List[Dict[str, Any]], iou_threshold: float = 0.40) -> List[Dict[str, Any]]:
+    """Suppresses duplicate overlapping detections across classes to keep the most confident detection per object."""
+    if not detections:
+        return []
+    sorted_dets = sorted(detections, key=lambda d: d["confidence"], reverse=True)
+    kept = []
+    for d in sorted_dets:
+        box_d = d["xyxy"]
+        overlap = False
+        for k in kept:
+            if compute_box_iou(box_d, k["xyxy"]) > iou_threshold:
+                overlap = True
+                break
+        if not overlap:
+            kept.append(d)
+    return kept
+
 def detect_with_yolo_model(
     clahe_cv: np.ndarray,
     towfish_lat: float,
     towfish_lon: float,
     towfish_heading: float,
     towfish_alt: float,
-    conf_threshold: float = 0.15
+    conf_threshold: float = 0.15,
+    iou_threshold: float = 0.40
 ) -> List[DetectedTarget]:
     """
     Executes real inference using the trained PyTorch YOLO model (best.pt).
-    Extracts bounding boxes, classes, confidence scores, and transforms them
-    into georeferenced Sonar Vision targets with 3D shadow metrics.
+    Logs raw model outputs, applies OBB/Box NMS, and transforms detected objects
+    into georeferenced Sonar Vision targets with real classes, exact confidences,
+    and 3D acoustic shadow metrics.
     """
     if yolo_model is None:
+        print("[AI PIPELINE] YOLO model is not initialized.")
         return []
 
     h_img, w_img = clahe_cv.shape[:2]
@@ -411,210 +447,120 @@ def detect_with_yolo_model(
         img_bgr = clahe_cv.copy()
 
     try:
-        results = yolo_model.predict(img_bgr, conf=conf_threshold, verbose=False)
+        results = yolo_model.predict(img_bgr, conf=conf_threshold, iou=iou_threshold, verbose=False)
     except Exception as e:
         print(f"[AI PIPELINE] YOLO predict error: {e}")
         return []
 
+    # 1. Extract raw YOLO detections directly from model output (OBB or regular boxes)
+    raw_yolo_results: List[Dict[str, Any]] = []
+
+    for r in results:
+        # Check OBB (Oriented Bounding Boxes) first if model has OBB
+        if hasattr(r, 'obb') and r.obb is not None and len(r.obb) > 0:
+            for idx, obb in enumerate(r.obb):
+                cls_id = int(obb.cls[0].item())
+                conf = float(obb.conf[0].item())
+                class_name = str(yolo_model.names.get(cls_id, f"class_{cls_id}"))
+                xywhr = obb.xywhr[0].tolist() if hasattr(obb, 'xywhr') else [0, 0, 0, 0, 0]
+                cx, cy, bw, bh, r_rad = xywhr
+                angle_deg = float(np.degrees(r_rad))
+                xyxy = [cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0]
+                raw_yolo_results.append({
+                    "class_id": cls_id,
+                    "class_name": class_name,
+                    "confidence": conf,
+                    "coords": xywhr,
+                    "xyxy": xyxy,
+                    "obb": {"cx": cx, "cy": cy, "w": bw, "h": bh, "angle_deg": angle_deg},
+                    "is_obb": True
+                })
+        # Standard detection boxes
+        elif hasattr(r, 'boxes') and r.boxes is not None and len(r.boxes) > 0:
+            for idx, box in enumerate(r.boxes):
+                cls_id = int(box.cls[0].item())
+                conf = float(box.conf[0].item())
+                class_name = str(yolo_model.names.get(cls_id, f"class_{cls_id}"))
+                xyxy = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = xyxy
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                bw = max(1.0, x2 - x1)
+                bh = max(1.0, y2 - y1)
+                raw_yolo_results.append({
+                    "class_id": cls_id,
+                    "class_name": class_name,
+                    "confidence": conf,
+                    "coords": xyxy,
+                    "xyxy": xyxy,
+                    "obb": {"cx": cx, "cy": cy, "w": bw, "h": bh, "angle_deg": 0.0},
+                    "is_obb": False
+                })
+
+    # 2. LOG RAW YOLO INFERENCE OUTPUT BEFORE ANY POST-PROCESSING
+    print("=" * 60)
+    print(f"[AI PIPELINE] --- RAW YOLO INFERENCE RESULTS (Total: {len(raw_yolo_results)}) ---")
+    print(raw_yolo_results)
+    for raw in raw_yolo_results:
+        print(f"  [RAW] Class ID: {raw['class_id']} | Class Name: '{raw['class_name']}' | Confidence: {raw['confidence']:.4f} | Coords: {raw['coords']}")
+    print("=" * 60)
+
+    if not raw_yolo_results:
+        print("[AI PIPELINE] No raw detections found in image (detections: []).")
+        return []
+
+    # 3. Apply NMS overlap suppression to merge duplicate overlapping boxes
+    filtered_detections = apply_nms_suppression(raw_yolo_results, iou_threshold=iou_threshold)
+    print(f"[AI PIPELINE] Detections after NMS suppression: {len(filtered_detections)} (from {len(raw_yolo_results)} raw)")
+
+    # 4. Transform into Sonar Vision targets with real classes, exact confidences, and geometry
     targets: List[DetectedTarget] = []
     scale_x = 640.0 / max(1, w_img)
     scale_y = 512.0 / max(1, h_img)
 
-    for r in results:
-        if not hasattr(r, 'boxes') or r.boxes is None or len(r.boxes) == 0:
-            continue
+    for idx, det in enumerate(filtered_detections):
+        cls_id = det["class_id"]
+        class_raw = det["class_name"].lower()
+        conf = round(float(det["confidence"]), 4)
 
-        for idx, box in enumerate(r.boxes):
-            cls_id = int(box.cls[0].item())
-            conf = round(float(box.conf[0].item()), 3)
-            class_raw = yolo_model.names.get(cls_id, str(cls_id)).lower()
-            meta = CLASS_METADATA.get(class_raw, {
-                "name": f"Sonar Contact ({class_raw.title()})",
-                "type": f"{class_raw}_target",
-                "severity": "Yellow",
-                "risk": "Subsea Anomaly Contact",
-                "icon": "🎯",
-                "color_hex": "#F59E0B",
-                "action": "Optical inspection recommended."
-            })
+        meta = CLASS_METADATA.get(class_raw, {
+            "name": f"{det['class_name'].title()} Contact",
+            "type": f"{class_raw}_target",
+            "severity": "Yellow",
+            "risk": "Subsea Anomaly Contact",
+            "icon": "🎯",
+            "color_hex": "#F59E0B",
+            "action": "Optical inspection recommended."
+        })
 
-            xyxy = box.xyxy[0].tolist()
-            x1, y1, x2, y2 = xyxy
-            cx = (x1 + x2) / 2.0
-            cy = (y1 + y2) / 2.0
-            bw = max(15.0, x2 - x1)
-            bh = max(12.0, y2 - y1)
+        obb = det["obb"]
+        scaled_cx = obb["cx"] * scale_x
+        scaled_cy = obb["cy"] * scale_y
+        scaled_w = obb["w"] * scale_x
+        scaled_h = obb["h"] * scale_y
+        angle_deg = obb["angle_deg"]
 
-            scaled_cx = cx * scale_x
-            scaled_cy = cy * scale_y
-            scaled_w = bw * scale_x
-            scaled_h = bh * scale_y
-
-            # Slant range & shadow relief calculation
-            slant_range = round(15.0 + (scaled_cy / 512.0) * 45.0, 1)
-            shadow_len = round(max(3.0, (scaled_h / 8.0) * 1.5), 1)
-            offset_deg = 90.0 if scaled_cx >= 320.0 else -90.0
-
-            geo_info = calculate_georeferencing_forward(
-                towfish_lat, towfish_lon, towfish_heading, towfish_alt, slant_range, shadow_len, offset_deg
-            )
-
-            # Scorecard
-            scorecard = generate_class_scorecard(class_raw, conf)
-
-            targets.append(
-                DetectedTarget(
-                    id=f"TGT-YOLO-0{idx + 1}",
-                    target_name=meta["name"],
-                    target_type=meta["type"],
-                    confidence=conf,
-                    severity=meta["severity"],
-                    risk_level=meta["risk"],
-                    latitude=geo_info["latitude"],
-                    longitude=geo_info["longitude"],
-                    depth_meters=round(towfish_alt + 30.0 + idx * 2.5, 1),
-                    bearing_deg=geo_info["bearing_deg"],
-                    ground_range_meters=geo_info["ground_range_m"],
-                    bbox_obb=BoundingBoxOBB(
-                        cx=round(scaled_cx, 1),
-                        cy=round(scaled_cy, 1),
-                        w=round(scaled_w, 1),
-                        h=round(scaled_h, 1),
-                        angle_deg=0.0
-                    ),
-                    shadow_metrics=ShadowMetrics(
-                        shadow_length_m=shadow_len,
-                        slant_range_m=slant_range,
-                        towfish_altitude_m=towfish_alt,
-                        estimated_target_height_m=geo_info["target_height_m"],
-                        shadow_contrast_index=0.885,
-                        shadow_confidence_pct=round(conf * 98.2, 1),
-                        verified_3d=True
-                    ),
-                    unet_segmentation_polygon=None,
-                    class_probabilities=scorecard,
-                    action_recommendation=meta["action"]
-                )
-            )
-
-    return targets
-
-def detect_dynamic_targets_cv(
-    raw_cv: np.ndarray,
-    clahe_cv: np.ndarray,
-    towfish_lat: float,
-    towfish_lon: float,
-    towfish_heading: float,
-    towfish_alt: float,
-    filename: str
-) -> List[DetectedTarget]:
-    """Fallback Computer Vision detector when no YOLO boxes are detected."""
-    h_img, w_img = clahe_cv.shape[:2]
-    mean_val = float(np.mean(clahe_cv))
-    std_val = float(np.std(clahe_cv))
-
-    # Threshold for high acoustic backscatter reflection
-    thresh_val = min(230, int(mean_val + max(20, std_val * 1.05)))
-    _, binary_mask = cv2.threshold(clahe_cv, thresh_val, 255, cv2.THRESH_BINARY)
-
-    # Morphological cleaning
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    cleaned_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-    cleaned_mask = cv2.morphologyEx(cleaned_mask, cv2.MORPH_OPEN, kernel)
-
-    contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Sort contours by area descending
-    contours = [c for c in contours if cv2.contourArea(c) > 150]
-    contours.sort(key=cv2.contourArea, reverse=True)
-
-    if len(contours) == 0:
-        return []
-
-    detected_targets: List[DetectedTarget] = []
-    
-    for idx, cnt in enumerate(contours[:4]):
-        area = cv2.contourArea(cnt)
-        rect = cv2.minAreaRect(cnt)
-        (cx, cy), (bw, bh), angle = rect
-
-        # OpenCV angle normalization
-        if bw < bh:
-            bw, bh = bh, bw
-            angle += 90.0
-        while angle > 90.0:
-            angle -= 180.0
-        while angle < -90.0:
-            angle += 180.0
-
-        aspect_ratio = bw / max(1.0, bh)
-        diag = np.sqrt(bw * bw + bh * bh)
-
-        # Scale coordinates relative to standard 640x512 canvas if different
-        scale_x = 640.0 / max(1, w_img)
-        scale_y = 512.0 / max(1, h_img)
-
-        scaled_cx = cx * scale_x
-        scaled_cy = cy * scale_y
-        scaled_w = max(30.0, bw * scale_x)
-        scaled_h = max(20.0, bh * scale_y)
-
-        # Slant range & shadow relief estimation
         slant_range = round(15.0 + (scaled_cy / 512.0) * 45.0, 1)
-        shadow_len = round(max(3.0, (scaled_h / 8.0) * 1.5), 1)
+        shadow_len = round(max(2.0, (scaled_h / 8.0) * 1.5), 1)
+        offset_deg = 90.0 if scaled_cx >= 320.0 else -90.0
+
         geo_info = calculate_georeferencing_forward(
-            towfish_lat, towfish_lon, towfish_heading, towfish_alt, slant_range, shadow_len, 90.0 if scaled_cx >= 320 else -90.0
+            towfish_lat, towfish_lon, towfish_heading, towfish_alt, slant_range, shadow_len, offset_deg
         )
 
-        # Classification
-        if area > 4000 or diag > 140:
-            t_type = "shipwreck_wreckage"
-            t_name = "Historic Shipwreck Structural Hull Section"
-            severity = "Red"
-            risk = "Major Navigational Obstruction"
-            conf = 0.965
-            action = "Log critical obstruction on nautical charts. Establish 150m clearance perimeter."
-            poly = None
-        elif aspect_ratio > 4.0:
-            t_type = "subsea_pipeline"
-            t_name = "Subsea Pipeline / Marine Trunk Corridor"
-            severity = "Green"
-            risk = "Low Risk Subsea Infrastructure"
-            conf = 0.932
-            action = "Linear alignment nominal. Structural integrity verified with continuous acoustic return."
-            poly = None
-        elif aspect_ratio < 2.0 and area < 1500:
-            t_type = "naval_mine_uxo"
-            t_name = "Proud Bottom Cylinder / UXO Anomaly"
-            severity = "Red"
-            risk = "High Risk Ordnance Anomaly"
-            conf = 0.918
-            action = "Standoff protocol active. Dispatch EOD ROV for optical validation."
-            poly = None
-        else:
-            t_type = "ghost_net_waters"
-            t_name = "Ghost Fishing Net & Debris Entanglement"
-            severity = "Yellow"
-            risk = "Environmental Hazard"
-            conf = 0.888
-            action = "Flag for marine conservation ROV salvage sweep. High risk of wildlife entanglement."
-            epsilon = 0.04 * cv2.arcLength(cnt, True)
-            approx = cv2.approxPolyDP(cnt, epsilon, True)
-            poly = [{"x": float(pt[0][0] * scale_x), "y": float(pt[0][1] * scale_y)} for pt in approx]
+        scorecard = generate_class_scorecard(class_raw, conf)
 
-        class_probs = generate_class_scorecard(t_type, conf)
-
-        detected_targets.append(
+        targets.append(
             DetectedTarget(
-                id=f"TGT-CV-0{idx + 1}",
-                target_name=t_name,
-                target_type=t_type,
+                id=f"TGT-YOLO-{idx + 1:02d}",
+                target_name=meta["name"],
+                target_type=meta["type"],
                 confidence=conf,
-                severity=severity,
-                risk_level=risk,
+                severity=meta["severity"],
+                risk_level=meta["risk"],
                 latitude=geo_info["latitude"],
                 longitude=geo_info["longitude"],
-                depth_meters=round(towfish_alt + 32.0 + idx * 3.5, 1),
+                depth_meters=round(towfish_alt + 30.0 + idx * 2.5, 1),
                 bearing_deg=geo_info["bearing_deg"],
                 ground_range_meters=geo_info["ground_range_m"],
                 bbox_obb=BoundingBoxOBB(
@@ -622,24 +568,24 @@ def detect_dynamic_targets_cv(
                     cy=round(scaled_cy, 1),
                     w=round(scaled_w, 1),
                     h=round(scaled_h, 1),
-                    angle_deg=round(angle, 1)
+                    angle_deg=round(angle_deg, 1)
                 ),
                 shadow_metrics=ShadowMetrics(
                     shadow_length_m=shadow_len,
                     slant_range_m=slant_range,
                     towfish_altitude_m=towfish_alt,
                     estimated_target_height_m=geo_info["target_height_m"],
-                    shadow_contrast_index=0.865,
-                    shadow_confidence_pct=round(conf * 98.5, 1),
+                    shadow_contrast_index=0.885,
+                    shadow_confidence_pct=round(conf * 100.0, 1),
                     verified_3d=True
                 ),
-                unet_segmentation_polygon=poly,
-                class_probabilities=class_probs,
-                action_recommendation=action
+                unet_segmentation_polygon=None,
+                class_probabilities=scorecard,
+                action_recommendation=meta["action"]
             )
         )
 
-    return detected_targets
+    return targets
 
 # ------------------------------------------------------------------------------
 # Core Pipeline Execution
@@ -682,6 +628,14 @@ def execute_full_sonar_pipeline(
         except Exception as e:
             print(f"[AI PIPELINE] Bytes decode error: {e}")
 
+    # Check if a sample dataset filename was passed directly (without base64)
+    if raw_cv is None and filename:
+        sample_path = os.path.join(CURRENT_DIR, "samples", filename)
+        if os.path.exists(sample_path):
+            raw_cv = cv2.imread(sample_path, cv2.IMREAD_GRAYSCALE)
+            if raw_cv is not None:
+                is_custom_upload = True
+
     if raw_cv is None:
         raw_cv = generate_synthetic_sonar_canvas()
 
@@ -689,128 +643,25 @@ def execute_full_sonar_pipeline(
     filtered_cv, snr_gain_db = apply_lee_speckle_filter(raw_cv, window_size=lee_window, cu=0.52)
     clahe_cv, entropy_gain_pct = apply_clahe_contrast(filtered_cv, clip_limit=clahe_clip)
 
-    # 3. Dynamic Target Detection from Trained YOLO Model (best.pt) vs Fallback
+    # 3. Dynamic Target Detection from Trained YOLO Model (best.pt)
     targets: List[DetectedTarget] = []
-    if is_custom_upload:
-        # First attempt: Trained PyTorch YOLO inference
-        if yolo_model is not None:
-            targets = detect_with_yolo_model(clahe_cv, towfish_lat, towfish_lon, towfish_heading, towfish_alt, conf_threshold=0.12)
-            if len(targets) > 0:
-                print(f"[AI PIPELINE] YOLO detected {len(targets)} targets from {filename}")
+    if yolo_model is not None:
+        targets = detect_with_yolo_model(
+            clahe_cv,
+            towfish_lat,
+            towfish_lon,
+            towfish_heading,
+            towfish_alt,
+            conf_threshold=0.15,
+            iou_threshold=0.40
+        )
+        if len(targets) > 0:
+            print(f"[AI PIPELINE] YOLO detected {len(targets)} targets from '{filename}'")
+        else:
+            print(f"[AI PIPELINE] 0 targets detected by YOLO from '{filename}'")
 
-        # Second attempt: Dynamic Computer Vision feature extraction if YOLO returned 0 hits
-        if len(targets) == 0:
-            targets = detect_dynamic_targets_cv(raw_cv, clahe_cv, towfish_lat, towfish_lon, towfish_heading, towfish_alt, filename)
-
-    if len(targets) == 0:
-        # Benchmark synthetic demo targets fallback
-        t1_geo = calculate_georeferencing_forward(towfish_lat, towfish_lon, towfish_heading, towfish_alt, 32.4, 8.6, 90.0)
-        t2_geo = calculate_georeferencing_forward(towfish_lat, towfish_lon, towfish_heading, towfish_alt, 58.2, 14.8, 90.0)
-        t3_geo = calculate_georeferencing_forward(towfish_lat, towfish_lon, towfish_heading, towfish_alt, 41.0, 4.2, -90.0)
-        t4_geo = calculate_georeferencing_forward(towfish_lat, towfish_lon, towfish_heading, towfish_alt, 48.0, 6.5, -90.0)
-
-        targets = [
-            DetectedTarget(
-                id="TGT-YOLO-01",
-                target_name="Historic Shipwreck Structural Hull Section",
-                target_type="shipwreck_wreckage",
-                confidence=0.965,
-                severity="Red",
-                risk_level="Major Navigational Obstruction",
-                latitude=t2_geo["latitude"],
-                longitude=t2_geo["longitude"],
-                depth_meters=round(towfish_alt + 36.1, 1),
-                bearing_deg=t2_geo["bearing_deg"],
-                ground_range_meters=t2_geo["ground_range_m"],
-                bbox_obb=BoundingBoxOBB(cx=540.0, cy=290.0, w=210.0, h=105.0, angle_deg=-15.8),
-                shadow_metrics=ShadowMetrics(
-                    shadow_length_m=14.8,
-                    slant_range_m=58.2,
-                    towfish_altitude_m=towfish_alt,
-                    estimated_target_height_m=t2_geo["target_height_m"],
-                    shadow_contrast_index=0.812,
-                    shadow_confidence_pct=91.4,
-                    verified_3d=True
-                ),
-                class_probabilities=generate_class_scorecard("shipwreck", 0.965),
-                action_recommendation="Establish 150m navigation clearance perimeter. Log hazard on NOAA ENC nautical charts."
-            ),
-            DetectedTarget(
-                id="TGT-YOLO-02",
-                target_name="Submerged Aircraft Fuselage Section",
-                target_type="aircraft_wreckage",
-                confidence=0.938,
-                severity="Red",
-                risk_level="High Risk Aviation Anomaly / Heritage",
-                latitude=t1_geo["latitude"],
-                longitude=t1_geo["longitude"],
-                depth_meters=round(towfish_alt + 31.7, 1),
-                bearing_deg=t1_geo["bearing_deg"],
-                ground_range_meters=t1_geo["ground_range_m"],
-                bbox_obb=BoundingBoxOBB(cx=220.0, cy=180.0, w=110.0, h=75.0, angle_deg=28.4),
-                shadow_metrics=ShadowMetrics(
-                    shadow_length_m=8.6,
-                    slant_range_m=32.4,
-                    towfish_altitude_m=towfish_alt,
-                    estimated_target_height_m=t1_geo["target_height_m"],
-                    shadow_contrast_index=0.884,
-                    shadow_confidence_pct=96.8,
-                    verified_3d=True
-                ),
-                class_probabilities=generate_class_scorecard("aircraft", 0.938),
-                action_recommendation="Log submerged aircraft wreckage coordinates. Establish 100m standoff perimeter."
-            ),
-            DetectedTarget(
-                id="TGT-YOLO-03",
-                target_name="Seabed Debris / Unclassified Contact",
-                target_type="seabed_debris",
-                confidence=0.892,
-                severity="Yellow",
-                risk_level="Medium Risk Subsea Anomaly",
-                latitude=t4_geo["latitude"],
-                longitude=t4_geo["longitude"],
-                depth_meters=round(towfish_alt + 34.0, 1),
-                bearing_deg=t4_geo["bearing_deg"],
-                ground_range_meters=t4_geo["ground_range_m"],
-                bbox_obb=BoundingBoxOBB(cx=460.0, cy=140.0, w=130.0, h=95.0, angle_deg=-32.0),
-                shadow_metrics=ShadowMetrics(
-                    shadow_length_m=6.5,
-                    slant_range_m=48.0,
-                    towfish_altitude_m=towfish_alt,
-                    estimated_target_height_m=t4_geo["target_height_m"],
-                    shadow_contrast_index=0.790,
-                    shadow_confidence_pct=89.5,
-                    verified_3d=True
-                ),
-                class_probabilities=generate_class_scorecard("other", 0.892),
-                action_recommendation="Secondary acoustic sweep recommended. Dispatch AUV/ROV for optical validation."
-            ),
-            DetectedTarget(
-                id="TGT-YOLO-04",
-                target_name="Marine Biomass / Fish School Cluster",
-                target_type="fish_biomass",
-                confidence=0.915,
-                severity="Green",
-                risk_level="Low Risk Biological Contact",
-                latitude=t3_geo["latitude"],
-                longitude=t3_geo["longitude"],
-                depth_meters=round(towfish_alt + 29.5, 1),
-                bearing_deg=t3_geo["bearing_deg"],
-                ground_range_meters=t3_geo["ground_range_m"],
-                bbox_obb=BoundingBoxOBB(cx=310.0, cy=460.0, w=240.0, h=60.0, angle_deg=62.3),
-                shadow_metrics=ShadowMetrics(
-                    shadow_length_m=4.2,
-                    slant_range_m=41.0,
-                    towfish_altitude_m=towfish_alt,
-                    estimated_target_height_m=t3_geo["target_height_m"],
-                    shadow_contrast_index=0.745,
-                    shadow_confidence_pct=88.2,
-                    verified_3d=True
-                ),
-                class_probabilities=generate_class_scorecard("fish", 0.915),
-                action_recommendation="Biological contact verified. Target does not pose navigational or structural hazard."
-            )
-        ]
+    # If YOLO returns no detections for any custom/uploaded image:
+    # return { "targets": [] } - DO NOT generate fake shipwrecks.
 
     duration_ms = round((time.time() - t_start) * 1000.0, 1)
 

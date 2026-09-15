@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   Upload,
-  Sliders,
   RefreshCw,
   CheckSquare,
   Square,
@@ -15,8 +14,6 @@ import { SonarColorPalette } from '../utils/sonarSynthetic';
 interface SidebarProps {
   onImageUploaded: (file: File | null, sampleId?: string) => void;
   fileName: string | null;
-  minConfidence: number;
-  setMinConfidence: (val: number) => void;
   selectedSeverities: SeverityLevel[];
   setSelectedSeverities: React.Dispatch<React.SetStateAction<SeverityLevel[]>>;
   palette: SonarColorPalette;
@@ -36,8 +33,6 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   onImageUploaded,
   fileName,
-  minConfidence,
-  setMinConfidence,
   selectedSeverities,
   setSelectedSeverities,
   palette,
@@ -326,29 +321,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       )}
-
-      {/* Global Confidence & Severity Thresholds */}
-      <div className="space-y-2 pt-2 border-t border-slate-800/80">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-            <span>AI Confidence Cutoff</span>
-          </label>
-          <span className="text-xs font-mono font-bold text-cyan-400">
-            {(minConfidence * 100).toFixed(0)}%
-          </span>
-        </div>
-        <input
-          id="confidence-slider"
-          type="range"
-          min="0.50"
-          max="0.99"
-          step="0.01"
-          value={minConfidence}
-          onChange={(e) => setMinConfidence(parseFloat(e.target.value))}
-          className="w-full accent-cyan-400 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer"
-        />
-      </div>
 
       {/* Severity Filter */}
       <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
